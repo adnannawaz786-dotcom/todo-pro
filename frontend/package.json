@@ -1,0 +1,135 @@
+{
+  "name": "todo-pro-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready Todo List application frontend with authentication, offline capability, and real-time updates",
+  "dependencies": {
+    "@reduxjs/toolkit": "^1.9.7",
+    "@types/node": "^20.8.7",
+    "@types/react": "^18.2.31",
+    "@types/react-dom": "^18.2.14",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-redux": "^8.1.3",
+    "react-router-dom": "^6.17.0",
+    "react-scripts": "5.0.1",
+    "typescript": "^5.2.2",
+    "web-vitals": "^3.5.0",
+    "axios": "^1.5.1",
+    "socket.io-client": "^4.7.2",
+    "react-hook-form": "^7.47.0",
+    "react-hot-toast": "^2.4.1",
+    "framer-motion": "^10.16.4",
+    "date-fns": "^2.30.0",
+    "uuid": "^9.0.1",
+    "@types/uuid": "^9.0.6",
+    "localforage": "^1.10.0",
+    "workbox-window": "^7.0.0",
+    "react-intersection-observer": "^9.5.2",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-virtualized-auto-sizer": "^1.0.20",
+    "react-window": "^1.8.8",
+    "@types/react-window": "^1.8.7",
+    "react-query": "^3.39.3",
+    "clsx": "^2.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.4",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@types/jest": "^29.5.6",
+    "eslint": "^8.52.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.0.3",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.0.2",
+    "workbox-cli": "^7.0.0",
+    "@craco/craco": "^7.1.0",
+    "tailwindcss": "^3.3.5",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "@types/react-virtualized-auto-sizer": "^1.0.2"
+  },
+  "scripts": {
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test",
+    "test:coverage": "craco test --coverage --watchAll=false",
+    "eject": "react-scripts eject",
+    "lint": "eslint src --ext .ts,.tsx --fix",
+    "lint:check": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css,md}\"",
+    "type-check": "tsc --noEmit",
+    "build:analyze": "npm run build && npx serve -s build",
+    "generate-sw": "workbox generateSW workbox-config.js",
+    "prepare": "cd .. && husky install frontend/.husky"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest",
+      "prettier"
+    ],
+    "plugins": [
+      "react-hooks"
+    ],
+    "rules": {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+      "no-console": "warn",
+      "no-debugger": "error",
+      "prefer-const": "error",
+      "@typescript-eslint/no-unused-vars": "error"
+    }
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": true,
+    "printWidth": 80,
+    "tabWidth": 2,
+    "useTabs": false
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "src/**/*.{json,css,md}": [
+      "prettier --write"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "proxy": "http://localhost:5000",
+  "jest": {
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "!src/**/*.d.ts",
+      "!src/index.tsx",
+      "!src/serviceWorkerRegistration.ts"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    }
+  }
+}
