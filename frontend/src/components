@@ -1,0 +1,427 @@
+// Button.tsx
+import React from 'react';
+import { cn } from '../utils/cn';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+  children: React.ReactNode;
+}
+
+export const Button: React.FC<ButtonProps> = ({
+  variant = 'primary',
+  size = 'md',
+  loading = false,
+  className,
+  children,
+  disabled,
+  ...props
+}) => {
+  const baseClasses = 'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+  
+  const variants = {
+    primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 shadow-lg hover:shadow-xl',
+    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600',
+    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-lg hover:shadow-xl',
+    ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-gray-500 dark:text-gray-300 dark:hover:bg-gray-800'
+  };
+  
+  const sizes = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-sm',
+    lg: 'px-6 py-3 text-base'
+  };
+
+  return (
+    <button
+      className={cn(baseClasses, variants[variant], sizes[size], className)}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading && (
+        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      )}
+      {children}
+    </button>
+  );
+};
+
+// Input.tsx
+import React, { forwardRef } from 'react';
+import { cn } from '../utils/cn';
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  error?: string;
+  icon?: React.ReactNode;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ label, error, icon, className, ...props }, ref) => {
+    return (
+      <div className="w-full">
+        {label && (
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {label}
+          </label>
+        )}
+        <div className="relative">
+          {icon && (
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="text-gray-400">{icon}</div>
+            </div>
+          )}
+          <input
+            ref={ref}
+            className={cn(
+              'w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:placeholder-gray-400',
+              icon && 'pl-10',
+              error && 'border-red-500 focus:ring-red-500',
+              className
+            )}
+            {...props}
+          />
+        </div>
+        {error && (
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
+      </div>
+    );
+  }
+);
+
+Input.displayName = 'Input';
+
+// Modal.tsx
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { cn } from '../utils/cn';
+
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  children: React.ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+}
+
+export const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md'
+}) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
+
+  const handleBackdropClick = (event: React.MouseEvent) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
+  const sizes = {
+    sm: 'max-w-md',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl'
+  };
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={modalRef}
+        className={cn(
+          'w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl transform transition-all duration-300 scale-100 opacity-100',
+          sizes[size]
+        )}
+      >
+        {title && (
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {title}
+            </h3>
+          </div>
+        )}
+        <div className="p-6">{children}</div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// Card.tsx
+import React from 'react';
+import { cn } from '../utils/cn';
+
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+  padding?: 'sm' | 'md' | 'lg';
+  hover?: boolean;
+}
+
+export const Card: React.FC<CardProps> = ({
+  children,
+  className,
+  padding = 'md',
+  hover = false
+}) => {
+  const paddings = {
+    sm: 'p-3',
+    md: 'p-4',
+    lg: 'p-6'
+  };
+
+  return (
+    <div
+      className={cn(
+        'bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 transition-all duration-200',
+        hover && 'hover:shadow-lg hover:-translate-y-1',
+        paddings[padding],
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+};
+
+// Loading.tsx
+import React from 'react';
+import { cn } from '../utils/cn';
+
+interface LoadingProps {
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+export const Loading: React.FC<LoadingProps> = ({ size = 'md', className }) => {
+  const sizes = {
+    sm: 'h-4 w-4',
+    md: 'h-8 w-8',
+    lg: 'h-12 w-12'
+  };
+
+  return (
+    <div className={cn('flex items-center justify-center', className)}>
+      <div
+        className={cn(
+          'animate-spin rounded-full border-2 border-gray-300 border-t-blue-600',
+          sizes[size]
+        )}
+      />
+    </div>
+  );
+};
+
+// Toast.tsx
+import React, { useEffect } from 'react';
+import { cn } from '../utils/cn';
+
+interface ToastProps {
+  message: string;
+  type?: 'success' | 'error' | 'warning' | 'info';
+  isVisible: boolean;
+  onClose: () => void;
+  duration?: number;
+}
+
+export const Toast: React.FC<ToastProps> = ({
+  message,
+  type = 'info',
+  isVisible,
+  onClose,
+  duration = 5000
+}) => {
+  useEffect(() => {
+    if (isVisible && duration > 0) {
+      const timer = setTimeout(onClose, duration);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, duration, onClose]);
+
+  const types = {
+    success: 'bg-green-500 text-white',
+    error: 'bg-red-500 text-white',
+    warning: 'bg-yellow-500 text-black',
+    info: 'bg-blue-500 text-white'
+  };
+
+  const icons = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+
+  if (!isVisible) return null;
+
+  return (
+    <div
+      className={cn(
+        'fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transform transition-all duration-300 flex items-center space-x-2 max-w-sm',
+        types[type],
+        isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+      )}
+    >
+      <span className="font-bold">{icons[type]}</span>
+      <span className="flex-1">{message}</span>
+      <button
+        onClick={onClose}
+        className="ml-2 hover:opacity-75 focus:outline-none"
+      >
+        ✕
+      </button>
+    </div>
+  );
+};
+
+// Checkbox.tsx
+import React, { forwardRef } from 'react';
+import { cn } from '../utils/cn';
+
+interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+}
+
+export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
+  ({ label, className, ...props }, ref) => {
+    return (
+      <label className="flex items-center space-x-2 cursor-pointer">
+        <input
+          ref={ref}
+          type="checkbox"
+          className={cn(
+            'h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 transition-colors duration-200',
+            className
+          )}
+          {...props}
+        />
+        {label && (
+          <span className="text-sm text-gray-700 dark:text-gray-300 select-none">
+            {label}
+          </span>
+        )}
+      </label>
+    );
+  }
+);
+
+Checkbox.displayName = 'Checkbox';
+
+// Dropdown.tsx
+import React, { useState, useRef, useEffect } from 'react';
+import { cn } from '../utils/cn';
+
+interface DropdownOption {
+  value: string;
+  label: string;
+  icon?: React.ReactNode;
+}
+
+interface DropdownProps {
+  options: DropdownOption[];
+  value?: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+export const Dropdown: React.FC<DropdownProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select option',
+  className
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(option => option.value === value);
+
+  return (
+    <div ref={dropdownRef} className={cn('relative', className)}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3 py-2 text-left bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            {selectedOption?.icon}
+            <span className="text-gray-900 dark:text-white">
+              {selectedOption?.label || placeholder}
+            </span>
+          </div>
+          <svg
+            className={cn(
+              'h-5 w-5 text-gray-400 transition-transform duration-200',
+              isOpen && 'transform rotate-180'
+            )}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className={cn(
+                'w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 flex items-center space-x-2',
+                value === option.value && 'bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+              )}
+            >
+              {option.icon}
+              <span>{option.label}</span>
+            </button>
+          )
