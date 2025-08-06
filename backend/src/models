@@ -1,0 +1,446 @@
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: [true, 'Username is required'],
+    unique: true,
+    trim: true,
+    minlength: [3, 'Username must be at least 3 characters long'],
+    maxlength: [30, 'Username cannot exceed 30 characters']
+  },
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+  },
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [6, 'Password must be at least 6 characters long'],
+    select: false
+  },
+  avatar: {
+    type: String,
+    default: null
+  },
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationToken: String,
+  emailVerificationExpires: Date,
+  passwordResetToken: String,
+  passwordResetExpires: Date,
+  preferences: {
+    theme: {
+      type: String,
+      enum: ['light', 'dark', 'auto'],
+      default: 'auto'
+    },
+    notifications: {
+      email: {
+        type: Boolean,
+        default: true
+      },
+      push: {
+        type: Boolean,
+        default: true
+      }
+    },
+    dateFormat: {
+      type: String,
+      enum: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'],
+      default: 'MM/DD/YYYY'
+    },
+    timeFormat: {
+      type: String,
+      enum: ['12h', '24h'],
+      default: '12h'
+    }
+  },
+  lastLogin: {
+    type: Date,
+    default: Date.now
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for user's todos
+userSchema.virtual('todos', {
+  ref: 'Todo',
+  localField: '_id',
+  foreignField: 'user'
+});
+
+// Pre-save middleware to hash password
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Instance method to compare passwords
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Instance method to generate JWT token
+userSchema.methods.generateAuthToken = function() {
+  return jwt.sign(
+    { 
+      id: this._id,
+      username: this.username,
+      email: this.email
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+  );
+};
+
+// Instance method to generate refresh token
+userSchema.methods.generateRefreshToken = function() {
+  return jwt.sign(
+    { id: this._id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' }
+  );
+};
+
+// Todo Schema
+const todoSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: [true, 'Todo title is required'],
+    trim: true,
+    maxlength: [200, 'Title cannot exceed 200 characters']
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Description cannot exceed 1000 characters']
+  },
+  completed: {
+    type: Boolean,
+    default: false
+  },
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high', 'urgent'],
+    default: 'medium'
+  },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    default: null
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    maxlength: [30, 'Tag cannot exceed 30 characters']
+  }],
+  dueDate: {
+    type: Date,
+    default: null
+  },
+  reminderDate: {
+    type: Date,
+    default: null
+  },
+  completedAt: {
+    type: Date,
+    default: null
+  },
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  subtasks: [{
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [200, 'Subtask title cannot exceed 200 characters']
+    },
+    completed: {
+      type: Boolean,
+      default: false
+    },
+    completedAt: {
+      type: Date,
+      default: null
+    }
+  }],
+  attachments: [{
+    filename: String,
+    originalName: String,
+    mimetype: String,
+    size: Number,
+    url: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  recurring: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    pattern: {
+      type: String,
+      enum: ['daily', 'weekly', 'monthly', 'yearly'],
+      default: null
+    },
+    interval: {
+      type: Number,
+      default: 1,
+      min: 1
+    },
+    endDate: {
+      type: Date,
+      default: null
+    }
+  },
+  isArchived: {
+    type: Boolean,
+    default: false
+  },
+  position: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for completion percentage
+todoSchema.virtual('completionPercentage').get(function() {
+  if (this.subtasks.length === 0) return this.completed ? 100 : 0;
+  
+  const completedSubtasks = this.subtasks.filter(subtask => subtask.completed).length;
+  return Math.round((completedSubtasks / this.subtasks.length) * 100);
+});
+
+// Virtual for overdue status
+todoSchema.virtual('isOverdue').get(function() {
+  if (!this.dueDate || this.completed) return false;
+  return new Date() > this.dueDate;
+});
+
+// Pre-save middleware to set completedAt
+todoSchema.pre('save', function(next) {
+  if (this.isModified('completed')) {
+    if (this.completed && !this.completedAt) {
+      this.completedAt = new Date();
+    } else if (!this.completed) {
+      this.completedAt = null;
+    }
+  }
+  
+  // Update subtask completedAt
+  if (this.isModified('subtasks')) {
+    this.subtasks.forEach(subtask => {
+      if (subtask.completed && !subtask.completedAt) {
+        subtask.completedAt = new Date();
+      } else if (!subtask.completed) {
+        subtask.completedAt = null;
+      }
+    });
+  }
+  
+  next();
+});
+
+// Index for better query performance
+todoSchema.index({ user: 1, completed: 1 });
+todoSchema.index({ user: 1, dueDate: 1 });
+todoSchema.index({ user: 1, priority: 1 });
+todoSchema.index({ user: 1, category: 1 });
+todoSchema.index({ user: 1, createdAt: -1 });
+
+// Category Schema
+const categorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Category name is required'],
+    trim: true,
+    maxlength: [50, 'Category name cannot exceed 50 characters']
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Description cannot exceed 200 characters']
+  },
+  color: {
+    type: String,
+    match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Please enter a valid hex color'],
+    default: '#3B82F6'
+  },
+  icon: {
+    type: String,
+    default: 'folder'
+  },
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  isDefault: {
+    type: Boolean,
+    default: false
+  },
+  position: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+// Virtual for todo count
+categorySchema.virtual('todoCount', {
+  ref: 'Todo',
+  localField: '_id',
+  foreignField: 'category',
+  count: true
+});
+
+// Ensure unique category names per user
+categorySchema.index({ user: 1, name: 1 }, { unique: true });
+
+// Notification Schema
+const notificationSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  todo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Todo',
+    default: null
+  },
+  type: {
+    type: String,
+    enum: ['reminder', 'due_soon', 'overdue', 'completed', 'shared', 'system'],
+    required: true
+  },
+  title: {
+    type: String,
+    required: true,
+    maxlength: [100, 'Title cannot exceed 100 characters']
+  },
+  message: {
+    type: String,
+    required: true,
+    maxlength: [500, 'Message cannot exceed 500 characters']
+  },
+  isRead: {
+    type: Boolean,
+    default: false
+  },
+  readAt: {
+    type: Date,
+    default: null
+  },
+  scheduledFor: {
+    type: Date,
+    default: null
+  },
+  sent: {
+    type: Boolean,
+    default: false
+  },
+  sentAt: {
+    type: Date,
+    default: null
+  },
+  channels: {
+    email: {
+      type: Boolean,
+      default: false
+    },
+    push: {
+      type: Boolean,
+      default: false
+    },
+    inApp: {
+      type: Boolean,
+      default: true
+    }
+  }
+}, {
+  timestamps: true
+});
+
+// Index for better query performance
+notificationSchema.index({ user: 1, isRead: 1 });
+notificationSchema.index({ user: 1, createdAt: -1 });
+notificationSchema.index({ scheduledFor: 1, sent: 1 });
+
+// Session Schema for managing user sessions
+const sessionSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  refreshToken: {
+    type: String,
+    required: true
+  },
+  userAgent: String,
+  ipAddress: String,
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  expiresAt: {
+    type: Date,
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+// TTL index to automatically remove expired sessions
+sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+sessionSchema.index({ user: 1, isActive: 1 });
+
+// Create and export models
+const User = mongoose.model('User', userSchema);
+const Todo = mongoose.model('Todo', todoSchema);
+const Category = mongoose.model('Category', categorySchema);
+const Notification = mongoose.model('Notification', notificationSchema);
+const Session = mongoose.model('Session', sessionSchema);
+
+module.exports = {
+  User,
+  Todo,
+  Category,
+  Notification,
+  Session
+};
