@@ -1,0 +1,143 @@
+import { configureStore } from '@reduxjs/toolkit';
+import { persistStore, persistReducer } from 'redux-persist';
+import storage from 'redux-persist/lib/storage';
+import { combineReducers } from '@reduxjs/toolkit';
+import authSlice from './slices/authSlice';
+import todoSlice from './slices/todoSlice';
+import uiSlice from './slices/uiSlice';
+import syncSlice from './slices/syncSlice';
+
+// Persist configuration
+const persistConfig = {
+  key: 'root',
+  storage,
+  whitelist: ['auth', 'todos', 'sync'], // Only persist these reducers
+  blacklist: ['ui'], // Don't persist UI state
+};
+
+// Auth persist config - separate config for sensitive data
+const authPersistConfig = {
+  key: 'auth',
+  storage,
+  whitelist: ['user', 'isAuthenticated'], // Don't persist tokens in localStorage for security
+};
+
+// Todo persist config
+const todoPersistConfig = {
+  key: 'todos',
+  storage,
+  whitelist: ['items', 'filters', 'lastSync'], // Persist todos for offline capability
+};
+
+// Sync persist config
+const syncPersistConfig = {
+  key: 'sync',
+  storage,
+  whitelist: ['pendingActions', 'lastSyncTimestamp', 'offlineQueue'],
+};
+
+// Combine reducers with persistence
+const rootReducer = combineReducers({
+  auth: persistReducer(authPersistConfig, authSlice),
+  todos: persistReducer(todoPersistConfig, todoSlice),
+  ui: uiSlice, // UI state doesn't need persistence
+  sync: persistReducer(syncPersistConfig, syncSlice),
+});
+
+const persistedReducer = persistReducer(persistConfig, rootReducer);
+
+// Configure store with middleware
+export const store = configureStore({
+  reducer: persistedReducer,
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+        ignoredPaths: ['register', 'rehydrate'],
+      },
+    }).concat([
+      // Add custom middleware for offline sync
+      syncMiddleware,
+      // Add API middleware
+      apiMiddleware,
+    ]),
+  devTools: process.env.NODE_ENV !== 'production',
+});
+
+// Custom middleware for handling offline sync
+const syncMiddleware = (store) => (next) => (action) => {
+  const result = next(action);
+  
+  // Handle offline actions
+  if (action.type.startsWith('todos/') && !navigator.onLine) {
+    store.dispatch({
+      type: 'sync/addToOfflineQueue',
+      payload: action,
+    });
+  }
+  
+  return result;
+};
+
+// API middleware for handling async actions
+const apiMiddleware = (store) => (next) => (action) => {
+  if (action.type.endsWith('/pending')) {
+    store.dispatch({ type: 'ui/setLoading', payload: true });
+  }
+  
+  if (action.type.endsWith('/fulfilled') || action.type.endsWith('/rejected')) {
+    store.dispatch({ type: 'ui/setLoading', payload: false });
+  }
+  
+  return next(action);
+};
+
+// Create persistor
+export const persistor = persistStore(store);
+
+// Type definitions for TypeScript
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+
+// Typed hooks
+import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+export const useAppDispatch = () => useDispatch<AppDispatch>();
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
+
+// Store cleanup for testing
+export const cleanupStore = () => {
+  persistor.purge();
+};
+
+// Network status listener for offline/online sync
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    store.dispatch({ type: 'sync/setOnlineStatus', payload: true });
+    store.dispatch({ type: 'sync/processPendingActions' });
+  });
+  
+  window.addEventListener('offline', () => {
+    store.dispatch({ type: 'sync/setOnlineStatus', payload: false });
+  });
+}
+
+// Hot module replacement for development
+if (process.env.NODE_ENV === 'development' && module.hot) {
+  module.hot.accept('./slices/authSlice', () => {
+    store.replaceReducer(persistedReducer);
+  });
+  
+  module.hot.accept('./slices/todoSlice', () => {
+    store.replaceReducer(persistedReducer);
+  });
+  
+  module.hot.accept('./slices/uiSlice', () => {
+    store.replaceReducer(persistedReducer);
+  });
+  
+  module.hot.accept('./slices/syncSlice', () => {
+    store.replaceReducer(persistedReducer);
+  });
+}
+
+export default store;
