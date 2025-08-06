@@ -1,0 +1,546 @@
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const Todo = require('../models/Todo');
+const { validationResult } = require('express-validator');
+
+// Auth Controllers
+const authController = {
+  // Register user
+  register: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+      }
+
+      const { email, password, name } = req.body;
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: 'User already exists with this email'
+        });
+      }
+
+      // Hash password
+      const saltRounds = 12;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+      // Create user
+      const user = new User({
+        name,
+        email,
+        password: hashedPassword
+      });
+
+      await user.save();
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: user._id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
+
+      // Set secure cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'User registered successfully',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt
+        },
+        token
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error during registration'
+      });
+    }
+  },
+
+  // Login user
+  login: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+      }
+
+      const { email, password } = req.body;
+
+      // Find user by email
+      const user = await User.findOne({ email }).select('+password');
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid email or password'
+        });
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid email or password'
+        });
+      }
+
+      // Update last login
+      user.lastLogin = new Date();
+      await user.save();
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: user._id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
+
+      // Set secure cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          lastLogin: user.lastLogin
+        },
+        token
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error during login'
+      });
+    }
+  },
+
+  // Logout user
+  logout: async (req, res) => {
+    try {
+      res.clearCookie('token');
+      res.status(200).json({
+        success: true,
+        message: 'Logout successful'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error during logout'
+      });
+    }
+  },
+
+  // Get current user
+  getProfile: async (req, res) => {
+    try {
+      const user = await User.findById(req.user.userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
+          lastLogin: user.lastLogin
+        }
+      });
+    } catch (error) {
+      console.error('Get profile error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Update user profile
+  updateProfile: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+      }
+
+      const { name, email } = req.body;
+      const userId = req.user.userId;
+
+      // Check if email is already taken by another user
+      if (email) {
+        const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+        if (existingUser) {
+          return res.status(409).json({
+            success: false,
+            message: 'Email already in use'
+          });
+        }
+      }
+
+      const updateData = {};
+      if (name) updateData.name = name;
+      if (email) updateData.email = email;
+
+      const user = await User.findByIdAndUpdate(
+        userId,
+        updateData,
+        { new: true, runValidators: true }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
+          lastLogin: user.lastLogin
+        }
+      });
+    } catch (error) {
+      console.error('Update profile error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+};
+
+// Todo Controllers
+const todoController = {
+  // Get all todos for user
+  getTodos: async (req, res) => {
+    try {
+      const { page = 1, limit = 50, status, priority, search } = req.query;
+      const userId = req.user.userId;
+
+      // Build filter query
+      const filter = { userId };
+      if (status && status !== 'all') {
+        filter.status = status;
+      }
+      if (priority && priority !== 'all') {
+        filter.priority = priority;
+      }
+      if (search) {
+        filter.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      // Calculate pagination
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      // Get todos with pagination
+      const todos = await Todo.find(filter)
+        .sort({ createdAt: -1, priority: 1 })
+        .skip(skip)
+        .limit(parseInt(limit));
+
+      // Get total count for pagination
+      const total = await Todo.countDocuments(filter);
+
+      res.status(200).json({
+        success: true,
+        todos,
+        pagination: {
+          current: parseInt(page),
+          total: Math.ceil(total / parseInt(limit)),
+          count: todos.length,
+          totalTodos: total
+        }
+      });
+    } catch (error) {
+      console.error('Get todos error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Get single todo
+  getTodo: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+
+      const todo = await Todo.findOne({ _id: id, userId });
+      if (!todo) {
+        return res.status(404).json({
+          success: false,
+          message: 'Todo not found'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        todo
+      });
+    } catch (error) {
+      console.error('Get todo error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Create new todo
+  createTodo: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+      }
+
+      const { title, description, priority, dueDate, category } = req.body;
+      const userId = req.user.userId;
+
+      const todo = new Todo({
+        title,
+        description,
+        priority: priority || 'medium',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        category,
+        userId,
+        status: 'pending'
+      });
+
+      await todo.save();
+
+      res.status(201).json({
+        success: true,
+        message: 'Todo created successfully',
+        todo
+      });
+    } catch (error) {
+      console.error('Create todo error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Update todo
+  updateTodo: async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array()
+        });
+      }
+
+      const { id } = req.params;
+      const userId = req.user.userId;
+      const updateData = req.body;
+
+      // Remove fields that shouldn't be updated directly
+      delete updateData.userId;
+      delete updateData._id;
+      delete updateData.createdAt;
+
+      // Handle status change to completed
+      if (updateData.status === 'completed' && updateData.status !== 'completed') {
+        updateData.completedAt = new Date();
+      } else if (updateData.status !== 'completed') {
+        updateData.completedAt = null;
+      }
+
+      const todo = await Todo.findOneAndUpdate(
+        { _id: id, userId },
+        { ...updateData, updatedAt: new Date() },
+        { new: true, runValidators: true }
+      );
+
+      if (!todo) {
+        return res.status(404).json({
+          success: false,
+          message: 'Todo not found'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Todo updated successfully',
+        todo
+      });
+    } catch (error) {
+      console.error('Update todo error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Delete todo
+  deleteTodo: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+
+      const todo = await Todo.findOneAndDelete({ _id: id, userId });
+      if (!todo) {
+        return res.status(404).json({
+          success: false,
+          message: 'Todo not found'
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Todo deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete todo error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Toggle todo status
+  toggleTodo: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+
+      const todo = await Todo.findOne({ _id: id, userId });
+      if (!todo) {
+        return res.status(404).json({
+          success: false,
+          message: 'Todo not found'
+        });
+      }
+
+      // Toggle status
+      const newStatus = todo.status === 'completed' ? 'pending' : 'completed';
+      todo.status = newStatus;
+      todo.completedAt = newStatus === 'completed' ? new Date() : null;
+      todo.updatedAt = new Date();
+
+      await todo.save();
+
+      res.status(200).json({
+        success: true,
+        message: `Todo marked as ${newStatus}`,
+        todo
+      });
+    } catch (error) {
+      console.error('Toggle todo error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  },
+
+  // Get todo statistics
+  getStats: async (req, res) => {
+    try {
+      const userId = req.user.userId;
+
+      const stats = await Todo.aggregate([
+        { $match: { userId: userId } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            completed: {
+              $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+            },
+            pending: {
+              $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+            },
+            highPriority: {
+              $sum: { $cond: [{ $eq: ['$priority', 'high'] }, 1, 0] }
+            },
+            overdue: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ['$dueDate', null] },
+                      { $lt: ['$dueDate', new Date()] },
+                      { $ne: ['$status', 'completed'] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        }
+      ]);
+
+      const result = stats[0] || {
+        total: 0,
+        completed: 0,
+        pending: 0,
+        highPriority: 0,
+        overdue: 0
+      };
+
+      res.status(200).json({
+        success: true,
+        stats: {
+          ...result,
+          completionRate: result.total > 0 ? Math.
