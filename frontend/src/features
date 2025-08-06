@@ -1,0 +1,450 @@
+auth/components/LoginForm.tsx
+```typescript
+import React, { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { loginUser } from '../authSlice';
+import { RootState } from '../../store';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Card } from '../../components/ui/Card';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+
+interface LoginFormProps {
+  onSwitchToRegister: () => void;
+}
+
+export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
+  const dispatch = useDispatch();
+  const { loading, error } = useSelector((state: RootState) => state.auth);
+  
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.email) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+
+    try {
+      await dispatch(loginUser(formData) as any).unwrap();
+    } catch (error) {
+      // Error is handled by the slice
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear validation error when user starts typing
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <div className="p-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Welcome Back
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Sign in to your account
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <Input
+              type="email"
+              name="email"
+              placeholder="Email address"
+              value={formData.email}
+              onChange={handleInputChange}
+              error={validationErrors.email}
+              required
+              autoComplete="email"
+              className="w-full"
+            />
+          </div>
+
+          <div className="relative">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              placeholder="Password"
+              value={formData.password}
+              onChange={handleInputChange}
+              error={validationErrors.password}
+              required
+              autoComplete="current-password"
+              className="w-full pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-5 w-5" />
+              ) : (
+                <EyeIcon className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+              <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            className="w-full"
+            loading={loading}
+            disabled={loading}
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </Button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-gray-600 dark:text-gray-400">
+            Don't have an account?{' '}
+            <button
+              onClick={onSwitchToRegister}
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
+            >
+              Sign up
+            </button>
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+};
+```
+
+auth/components/RegisterForm.tsx
+```typescript
+import React, { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { registerUser } from '../authSlice';
+import { RootState } from '../../store';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Card } from '../../components/ui/Card';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+
+interface RegisterFormProps {
+  onSwitchToLogin: () => void;
+}
+
+export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) => {
+  const dispatch = useDispatch();
+  const { loading, error } = useSelector((state: RootState) => state.auth);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+      errors.name = 'Name is required';
+    } else if (formData.name.trim().length < 2) {
+      errors.name = 'Name must be at least 2 characters';
+    }
+
+    if (!formData.email) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      errors.password = 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
+    }
+
+    if (!formData.confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+
+    try {
+      await dispatch(registerUser({
+        name: formData.name.trim(),
+        email: formData.email,
+        password: formData.password
+      }) as any).unwrap();
+    } catch (error) {
+      // Error is handled by the slice
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear validation error when user starts typing
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <div className="p-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Create Account
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Sign up to get started
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <Input
+              type="text"
+              name="name"
+              placeholder="Full name"
+              value={formData.name}
+              onChange={handleInputChange}
+              error={validationErrors.name}
+              required
+              autoComplete="name"
+              className="w-full"
+            />
+          </div>
+
+          <div>
+            <Input
+              type="email"
+              name="email"
+              placeholder="Email address"
+              value={formData.email}
+              onChange={handleInputChange}
+              error={validationErrors.email}
+              required
+              autoComplete="email"
+              className="w-full"
+            />
+          </div>
+
+          <div className="relative">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              placeholder="Password"
+              value={formData.password}
+              onChange={handleInputChange}
+              error={validationErrors.password}
+              required
+              autoComplete="new-password"
+              className="w-full pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-5 w-5" />
+              ) : (
+                <EyeIcon className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+
+          <div className="relative">
+            <Input
+              type={showConfirmPassword ? 'text' : 'password'}
+              name="confirmPassword"
+              placeholder="Confirm password"
+              value={formData.confirmPassword}
+              onChange={handleInputChange}
+              error={validationErrors.confirmPassword}
+              required
+              autoComplete="new-password"
+              className="w-full pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+            >
+              {showConfirmPassword ? (
+                <EyeSlashIcon className="h-5 w-5" />
+              ) : (
+                <EyeIcon className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+              <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            className="w-full"
+            loading={loading}
+            disabled={loading}
+          >
+            {loading ? 'Creating account...' : 'Create Account'}
+          </Button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-gray-600 dark:text-gray-400">
+            Already have an account?{' '}
+            <button
+              onClick={onSwitchToLogin}
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
+            >
+              Sign in
+            </button>
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+};
+```
+
+auth/components/AuthGuard.tsx
+```typescript
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '../../store';
+import { checkAuth } from '../authSlice';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+
+interface AuthGuardProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
+export const AuthGuard: React.FC<AuthGuardProps> = ({ children, fallback }) => {
+  const dispatch = useDispatch();
+  const { isAuthenticated, loading, initialized } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if (!initialized) {
+      dispatch(checkAuth() as any);
+    }
+  }, [dispatch, initialized]);
+
+  if (!initialized || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return fallback ? <>{fallback}</> : null;
+  }
+
+  return <>{children}</>;
+};
+```
+
+auth/authSlice.ts
+```typescript
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { authAPI } from './authAPI';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  createdAt: string;
+}
+
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  loading: boolean;
+  error: string | null;
+  initialized: boolean;
+}
+
+const initialState: AuthState = {
+  user: null,
+  token: localStorage.getItem('token'),
+  isAuthenticated: false,
+  loading: false,
+  error: null,
+  initialized: false,
+};
+
+// Async thunks
+export const loginUser = createAsyncThunk(
+  'auth/login',
+  async (credentials: { email: string; password: string }, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.login(credentials);
+      localStorage.setItem('token', response.token);
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Login failed');
+    }
+  }
